@@ -17,7 +17,7 @@ All notable changes to `@bondify/node` will be documented in this file.
 
 ## 2.1.0 — Node.js > 14 & Next.js 16+ support
 
-- **Node.js support: `engines.node` set to `>=16`** (drops EOL Node 14;
+- **Node.js support: `engines.node` set to `>=18`** (drops EOL Node 14;
   supports 16/18/20/22).
 - **Express peer simplified to `>=4.0.0`** (covers Express 4 and 5; the old
   `>=4.0.0 || >=5.0.0` was redundant).
