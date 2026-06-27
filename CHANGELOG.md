@@ -2,7 +2,7 @@
 
 All notable changes to `@bondify/node` will be documented in this file.
 
-## Unreleased
+## 2.1.2 — Webhook signature hardening
 
 - **Bugfix — `verifyWebhook()` no longer risks an uncaught exception on a
   malformed `X-Bondify-Signature` header.** `Buffer.from(signature, 'hex')`
@@ -15,10 +15,14 @@ All notable changes to `@bondify/node` will be documented in this file.
   `BondifyWebhookError` with code `INVALID_SIGNATURE` instead of risking an
   unhandled error.
 
-## 2.1.0 — Node.js > 14 & Next.js 16+ support
+## 2.1.1
 
-- **Node.js support: `engines.node` set to `>=16`** (drops EOL Node 14;
-  supports 16/18/20/22).
+- Internal release. No public API changes.
+
+## 2.1.0 — Node.js ≥ 18 & Next.js 16+ support
+
+- **Node.js support: `engines.node` set to `>=18`** (drops EOL Node 14 and 16;
+  supports 18/20/22 (LTS)).
 - **Express peer simplified to `>=4.0.0`** (covers Express 4 and 5; the old
   `>=4.0.0 || >=5.0.0` was redundant).
 - **Bugfix — `verifyNextRequest()` now reads headers correctly in the Next.js
