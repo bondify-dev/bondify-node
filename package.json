@@ -1,0 +1,75 @@
+{
+  "name": "@bondify/node",
+  "version": "2.1.0",
+  "description": "Telegram Login & authentication SDK for Node.js and Express — verify Telegram OAuth proofs and webhooks server-side. By Bondify.",
+  "keywords": [
+    "telegram",
+    "telegram-login",
+    "telegram-auth",
+    "telegram-oauth",
+    "telegram-bot",
+    "auth",
+    "authentication",
+    "sdk",
+    "node",
+    "nodejs",
+    "express",
+    "express-middleware",
+    "nextjs",
+    "jwt",
+    "webhook",
+    "bondify"
+  ],
+  "homepage": "https://bondify.dev",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=16"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./middleware": {
+      "types": "./dist/middleware/express.d.ts",
+      "import": "./dist/middleware/express.js",
+      "require": "./dist/middleware/express.cjs"
+    },
+    "./webhooks": {
+      "types": "./dist/webhooks/handlers.d.ts",
+      "import": "./dist/webhooks/handlers.js",
+      "require": "./dist/webhooks/handlers.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/middleware/express.ts src/webhooks/handlers.ts --format esm,cjs --dts --clean",
+    "dev": "tsup src/index.ts src/middleware/express.ts src/webhooks/handlers.ts --format esm,cjs --dts --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.0"
+  },
+  "peerDependencies": {
+    "express": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.0",
+    "@types/jsonwebtoken": "^9.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
+  }
+}
