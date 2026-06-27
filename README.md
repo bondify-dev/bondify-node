@@ -188,7 +188,7 @@ top of Bondify itself.
 
 ## Requirements
 
-- Node.js `>=16`
+- Node.js `>=18`
 - Express `>=4` (optional — only needed for the Express middleware/webhook helpers)
 
 ## Related packages
