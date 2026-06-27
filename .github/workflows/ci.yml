@@ -36,3 +36,9 @@ jobs:
           test -f dist/index.js
           test -f dist/index.cjs
           test -f dist/index.d.ts
+          test -f dist/middleware/express.js
+          test -f dist/middleware/express.cjs
+          test -f dist/middleware/express.d.ts
+          test -f dist/webhooks/handlers.js
+          test -f dist/webhooks/handlers.cjs
+          test -f dist/webhooks/handlers.d.ts

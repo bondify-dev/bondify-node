@@ -1,6 +1,6 @@
 {
   "name": "@bondify/node",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Telegram Login & authentication SDK for Node.js and Express — verify Telegram OAuth proofs and webhooks server-side. By Bondify.",
   "keywords": [
     "telegram",
@@ -26,7 +26,7 @@
   "engines": {
     "node": ">=18"
   },
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
