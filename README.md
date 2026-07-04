@@ -22,6 +22,12 @@ without touching crypto yourself.
 npm install @bondify/node
 ```
 
+> **On `1.x`?** It's deprecated and unsupported — upgrade straight to `3.x`,
+> there's no need to stop at `2.x` first. See the
+> [changelog](./CHANGELOG.md#300--standardized-identity-shape-async-verification)
+> for the breaking changes (`verifyProof()` is now async and returns
+> camelCase fields).
+
 > **Before you start:** open your [Bondify dashboard](https://docs.bondify.dev),
 > open your project's **Settings**, and copy the **Webhook Secret** (`whsec_…`).
 > That secret is what signs the `proof` JWT and the webhook payloads — it's the
@@ -39,19 +45,28 @@ const bondify = new BondifyServer({
 
 ### Verify a proof JWT
 
+`verifyProof()` is `async` — always `await` it (verification is fully local,
+no network call is made; it's `async` for consistency with other auth SDKs).
+The proof is valid for **5 minutes** after issuance; past that, verification
+throws with code `TOKEN_EXPIRED` — handle that case explicitly and prompt the
+user to sign in again.
+
 ```ts
 // Express
-app.post('/api/auth/verify', (req, res) => {
+app.post('/api/auth/verify', async (req, res) => {
   try {
-    const user = bondify.verifyProof(req.body.proof);
-    res.json({ ok: true, telegramId: user.telegram_id });
+    const user = await bondify.verifyProof(req.body.proof);
+    res.json({ ok: true, telegramId: user.telegramId });
   } catch (e) {
+    if (e instanceof BondifyVerificationError && e.code === 'TOKEN_EXPIRED') {
+      return res.status(401).json({ error: 'Proof expired, please sign in again' });
+    }
     res.status(401).json({ error: (e as Error).message });
   }
 });
 
 // Or the non-throwing version — handy in middleware / SSR
-const user = bondify.safeVerifyProof(req.body.proof);
+const user = await bondify.safeVerifyProof(req.body.proof);
 if (!user) return res.status(401).json({ error: 'Unauthorized' });
 ```
 
@@ -63,7 +78,7 @@ import { createBondifyMiddleware } from '@bondify/node/middleware';
 const requireAuth = createBondifyMiddleware(bondify);
 
 app.get('/api/profile', requireAuth, (req, res) => {
-  res.json({ telegramId: req.bondifyUser!.telegram_id });
+  res.json({ telegramId: req.bondifyUser!.telegramId });
 });
 ```
 
@@ -112,9 +127,9 @@ import { verifyNextRequest } from '@bondify/node/middleware';
 const bondify = new BondifyServer({ jwtSecret: process.env.BONDIFY_WEBHOOK_SECRET! });
 
 export async function GET(request: Request) {
-  const user = verifyNextRequest(bondify, request);
+  const user = await verifyNextRequest(bondify, request);
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  return Response.json({ telegramId: user.telegram_id });
+  return Response.json({ telegramId: user.telegramId });
 }
 ```
 
@@ -132,12 +147,16 @@ export async function GET(request: Request) {
 
 ### `bondify.verifyProof(proof: string)`
 
-Verifies the JWT and returns `BondifyProofPayload`. Throws `BondifyVerificationError`
-on failure (`TOKEN_EXPIRED`, `INVALID_SIGNATURE`, `INVALID_TOKEN`, `MISSING_FIELDS`).
+**Async** — returns `Promise<BondifyUser>`. Verification is local (no
+network call); it's `async` purely for consistency with other auth SDKs.
+Throws `BondifyVerificationError` on failure (`TOKEN_EXPIRED`,
+`INVALID_SIGNATURE`, `INVALID_TOKEN`, `MISSING_FIELDS`). Proofs are valid for
+**5 minutes** after issuance — verify them promptly.
 
 ### `bondify.safeVerifyProof(proof: string)`
 
-Same as above, returns `null` instead of throwing.
+Same as above (also async), returns `Promise<BondifyUser | null>` — `null`
+instead of throwing.
 
 ### `bondify.verifyWebhook(payload, signature)`
 
@@ -156,8 +175,12 @@ result to `req.bondifyUser`.
 
 ### `verifyNextRequest(server, request, cookieName?)`
 
-Same idea for Next.js App Router Route Handlers, where `request.headers` is a
-Web API `Headers` object rather than a plain object.
+**Async** — returns `Promise<BondifyUser | null>`. Same idea for Next.js App
+Router Route Handlers, where `request.headers` is a Web API `Headers` object
+rather than a plain object. It reads the proof from the `Authorization:
+Bearer …` header first, then falls back to the `bondify_proof` cookie (or a
+custom cookie name you pass in); it never throws — a missing/invalid/expired
+proof all resolve to `null`, which you should treat as "unauthorized".
 
 ### `createWebhookHandler(server, handlers)` / `createNextWebhookHandler(server, handlers)`
 

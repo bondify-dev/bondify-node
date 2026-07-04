@@ -23,18 +23,35 @@ export interface BondifyServerConfig {
 }
 
 // ─── Verified proof JWT payload ───────────────────────────────────────────────
-export interface BondifyProofPayload {
-  telegram_id:       string;
-  telegram_name:     string;
-  telegram_username: string | null;
-  project_id:        string;
-  session_token:     string;
-  confirmed_at:      number;
+/**
+ * The verified identity returned by `verifyProof()` / `safeVerifyProof()`.
+ *
+ * Field names are camelCase to match `@bondify/react`'s `BondifyUser` — the
+ * same shape appears on the client (`useBondifyUser()`) and on the server
+ * (`verifyProof()`), so you never have to remember which side uses which
+ * casing.
+ */
+export interface BondifyUser {
+  telegramId:       string;
+  telegramName:     string;
+  telegramUsername: string | null;
+  projectId:        string;
+  sessionToken:     string;
+  confirmedAt:      number;
   /** Token expiry time (Unix timestamp) */
-  exp:               number;
+  exp:              number;
   /** Token issued-at time (Unix timestamp) */
-  iat:               number;
+  iat:              number;
 }
+
+/**
+ * @deprecated Renamed to `BondifyUser` in v3.0.0 for consistency with
+ * `@bondify/react` (camelCase on both client and server). This alias is kept
+ * so existing type-only imports keep compiling, but the object shape itself
+ * changed — it is camelCase now, not snake_case. Update your code to use
+ * `BondifyUser` and camelCase field access (`telegramId`, not `telegram_id`).
+ */
+export type BondifyProofPayload = BondifyUser;
 
 // ─── Webhook Event ────────────────────────────────────────────────────────────
 export type WebhookEventType = 'auth.confirmed' | 'auth.cancelled';
@@ -82,7 +99,7 @@ export class BondifyWebhookError extends Error {
 // ─── Express/Next.js middleware types ────────────────────────────────────────
 export interface BondifyRequest {
   /** Verified proof JWT payload */
-  bondifyUser: BondifyProofPayload;
+  bondifyUser: BondifyUser;
 }
 
 export interface BondifyMiddlewareOptions {

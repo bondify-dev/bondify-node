@@ -4,7 +4,7 @@
 // ============================================================
 
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
-import type { BondifyProofPayload, BondifyMiddlewareOptions } from '../types';
+import type { BondifyUser, BondifyMiddlewareOptions } from '../types';
 import { BondifyServer } from '../BondifyServer';
 import { BondifyVerificationError } from '../types';
 
@@ -12,7 +12,7 @@ import { BondifyVerificationError } from '../types';
 declare global {
   namespace Express {
     interface Request {
-      bondifyUser?: BondifyProofPayload;
+      bondifyUser?: BondifyUser;
     }
   }
 }
@@ -32,7 +32,7 @@ declare global {
  *
  * // Protected route
  * app.get('/api/profile', requireAuth, (req, res) => {
- *   res.json({ telegramId: req.bondifyUser!.telegram_id });
+ *   res.json({ telegramId: req.bondifyUser!.telegramId });
  * });
  * ```
  */
@@ -47,7 +47,7 @@ export function createBondifyMiddleware(
     onUnauthorized,
   } = options;
 
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     let token: string | null = null;
 
     // 1. Custom getter
@@ -82,7 +82,7 @@ export function createBondifyMiddleware(
     }
 
     try {
-      req.bondifyUser = server.verifyProof(token);
+      req.bondifyUser = await server.verifyProof(token);
       next();
     } catch (e) {
       const isExpired = e instanceof BondifyVerificationError && e.code === 'TOKEN_EXPIRED';
@@ -106,8 +106,21 @@ export function createBondifyMiddleware(
 // ─── Next.js Route Handler helper ────────────────────────────────────────────
 
 /**
- * Verifies the proof from a Next.js Request.
- * Used in App Router Route Handlers.
+ * Verifies the proof carried by a Next.js App Router Request.
+ * Used in Route Handlers (`app/api/**\/route.ts`).
+ *
+ * **Where it reads the proof from (checked in this order):**
+ * 1. `Authorization: Bearer <proof>` header
+ * 2. The `bondify_proof` cookie (or a custom name via the `cookieName` param)
+ *
+ * **What it returns:** `Promise<BondifyUser | null>` — resolves to the
+ * verified identity (camelCase fields) on success. It never throws: a
+ * missing header/cookie, an invalid signature, or an expired proof
+ * (5-minute lifetime) all resolve to `null`. It's a thin wrapper around
+ * `server.safeVerifyProof()`, so treat a `null` result as "not authorized"
+ * and respond with 401 — it doesn't distinguish *why* verification failed.
+ * If you need to tell "missing" apart from "expired" apart from "invalid",
+ * call `server.verifyProof()` directly and catch `BondifyVerificationError`.
  *
  * @example
  * ```ts
@@ -117,17 +130,17 @@ export function createBondifyMiddleware(
  * const bondify = new BondifyServer({ jwtSecret: process.env.BONDIFY_WEBHOOK_SECRET! }); // whsec_… from the dashboard
  *
  * export async function GET(request: Request) {
- *   const user = verifyNextRequest(bondify, request);
+ *   const user = await verifyNextRequest(bondify, request);
  *   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
- *   return Response.json({ telegramId: user.telegram_id });
+ *   return Response.json({ telegramId: user.telegramId });
  * }
  * ```
  */
-export function verifyNextRequest(
+export async function verifyNextRequest(
   server: BondifyServer,
   request: Request,
   cookieName = 'bondify_proof'
-): BondifyProofPayload | null {
+): Promise<BondifyUser | null> {
   // Next.js (App Router) passes a Web API Request, whose headers are a
   // Headers object: values can ONLY be read via .get(), not by index.
   // This used to read request.headers['authorization'], which on a real
@@ -150,7 +163,7 @@ export function verifyNextRequest(
   const authHeader = getHeader('authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
-    return server.safeVerifyProof(token);
+    return await server.safeVerifyProof(token);
   }
 
   // Cookie via the Web API
@@ -158,7 +171,7 @@ export function verifyNextRequest(
   if (cookieHeader) {
     const cookies = parseCookies(cookieHeader);
     const token   = cookies[cookieName];
-    if (token) return server.safeVerifyProof(token);
+    if (token) return await server.safeVerifyProof(token);
   }
 
   return null;
