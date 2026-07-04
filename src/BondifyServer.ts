@@ -8,7 +8,7 @@ import * as jwt    from 'jsonwebtoken';
 
 import type {
   BondifyServerConfig,
-  BondifyProofPayload,
+  BondifyUser,
   WebhookEvent,
 } from './types';
 import {
@@ -40,24 +40,39 @@ export class BondifyServer {
    * Verifies the proof JWT issued by Bondify after a successful sign-in.
    * Throws BondifyVerificationError if the token is invalid or expired.
    *
+   * **Always async — always `await` it.** Verification itself is local (no
+   * network call), but the method returns a `Promise` for consistency with
+   * every other auth SDK (Clerk, NextAuth, Passport, etc.), so `await` and
+   * `.then()` both work as expected.
+   *
+   * **Proof lifetime: 5 minutes.** The JWT's `exp` claim is set 5 minutes
+   * after issuance. Verify it promptly after receiving it — a proof that
+   * arrives late (slow network, user idles on a confirmation screen, etc.)
+   * will throw with code `TOKEN_EXPIRED`. Always handle that case explicitly
+   * and prompt the user to sign in again; don't treat it the same as an
+   * invalid signature.
+   *
    * @param proof — the JWT string from BondifyUser.proof
-   * @returns BondifyProofPayload — the verified payload
+   * @returns Promise<BondifyUser> — the verified identity (camelCase fields)
    *
    * @example
    * ```ts
    * const bondify = new BondifyServer({ jwtSecret: process.env.BONDIFY_WEBHOOK_SECRET! }); // whsec_… from the dashboard
    *
-   * app.post('/api/auth', (req, res) => {
+   * app.post('/api/auth', async (req, res) => {
    *   try {
-   *     const user = bondify.verifyProof(req.body.proof);
-   *     res.json({ telegramId: user.telegram_id });
+   *     const user = await bondify.verifyProof(req.body.proof);
+   *     res.json({ telegramId: user.telegramId });
    *   } catch (e) {
+   *     if (e instanceof BondifyVerificationError && e.code === 'TOKEN_EXPIRED') {
+   *       return res.status(401).json({ error: 'Proof expired, please sign in again' });
+   *     }
    *     res.status(401).json({ error: e.message });
    *   }
    * });
    * ```
    */
-  verifyProof(proof: string): BondifyProofPayload {
+  async verifyProof(proof: string): Promise<BondifyUser> {
     if (!proof || typeof proof !== 'string') {
       throw new BondifyVerificationError(
         'proof is required and must be a string',
@@ -73,7 +88,7 @@ export class BondifyServer {
     } catch (e) {
       if (e instanceof jwt.TokenExpiredError) {
         throw new BondifyVerificationError(
-          'Proof JWT has expired. The user must sign in again.',
+          'Proof JWT has expired (proofs are valid for 5 minutes). The user must sign in again.',
           'TOKEN_EXPIRED'
         );
       }
@@ -101,14 +116,14 @@ export class BondifyServer {
     }
 
     return {
-      telegram_id:       String(payload.telegram_id),
-      telegram_name:     String(payload.telegram_name),
-      telegram_username: payload.telegram_username ?? null,
-      project_id:        String(payload.project_id),
-      session_token:     String(payload.session_token),
-      confirmed_at:      Number(payload.confirmed_at ?? 0),
-      exp:               Number(payload.exp),
-      iat:               Number(payload.iat),
+      telegramId:       String(payload.telegram_id),
+      telegramName:     String(payload.telegram_name),
+      telegramUsername: payload.telegram_username ?? null,
+      projectId:        String(payload.project_id),
+      sessionToken:     String(payload.session_token),
+      confirmedAt:      Number(payload.confirmed_at ?? 0),
+      exp:              Number(payload.exp),
+      iat:              Number(payload.iat),
     };
   }
 
@@ -199,12 +214,16 @@ export class BondifyServer {
   // ══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Non-throwing version of verifyProof — returns null on failure.
-   * Handy for middleware and SSR.
+   * Non-throwing version of verifyProof — resolves to `null` instead of
+   * throwing (invalid signature, malformed token, or an expired proof —
+   * lifetime is 5 minutes — are all folded into `null`). Handy for
+   * middleware and SSR where you just need a yes/no.
+   *
+   * Also async — `await` it, same as `verifyProof()`.
    */
-  safeVerifyProof(proof: string): BondifyProofPayload | null {
+  async safeVerifyProof(proof: string): Promise<BondifyUser | null> {
     try {
-      return this.verifyProof(proof);
+      return await this.verifyProof(proof);
     } catch {
       return null;
     }

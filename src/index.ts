@@ -23,6 +23,8 @@ export type { AdminClientConfig } from './utils/admin-client';
 // Types
 export type {
   BondifyServerConfig,
+  BondifyUser,
+  /** @deprecated Use `BondifyUser` instead. */
   BondifyProofPayload,
   WebhookEvent,
   WebhookEventConfirmed,
