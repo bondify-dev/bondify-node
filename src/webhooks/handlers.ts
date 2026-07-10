@@ -26,7 +26,8 @@ export interface WebhookHandlers {
  * @example
  * ```ts
  * import express from 'express';
- * import { BondifyServer, createWebhookHandler } from '@bondify/node';
+ * import { BondifyServer } from '@bondify/node';
+ * import { createWebhookHandler } from '@bondify/node/webhooks';
  *
  * const bondify = new BondifyServer({ jwtSecret: process.env.BONDIFY_WEBHOOK_SECRET! }); // whsec_… from the dashboard
  *
@@ -88,7 +89,8 @@ export function createWebhookHandler(
  * @example
  * ```ts
  * // app/api/webhooks/bondify/route.ts
- * import { createNextWebhookHandler, BondifyServer } from '@bondify/node';
+ * import { BondifyServer } from '@bondify/node';
+ * import { createNextWebhookHandler } from '@bondify/node/webhooks';
  *
  * const bondify = new BondifyServer({
  *   jwtSecret: process.env.BONDIFY_WEBHOOK_SECRET!, // whsec_… from the dashboard (Project → Settings)

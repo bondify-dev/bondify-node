@@ -35,6 +35,8 @@ export interface BondifyUser {
   telegramId:       string;
   telegramName:     string;
   telegramUsername: string | null;
+  /** Phone number (one-tap flow, Pro/Business plans only; otherwise null) */
+  telegramPhone:    string | null;
   projectId:        string;
   sessionToken:     string;
   confirmedAt:      number;

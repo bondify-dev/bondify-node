@@ -6,7 +6,6 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import type { BondifyUser, BondifyMiddlewareOptions } from '../types';
 import { BondifyServer } from '../BondifyServer';
-import { BondifyVerificationError } from '../types';
 
 // Extend the Express Request type
 declare global {
@@ -85,7 +84,17 @@ export function createBondifyMiddleware(
       req.bondifyUser = await server.verifyProof(token);
       next();
     } catch (e) {
-      const isExpired = e instanceof BondifyVerificationError && e.code === 'TOKEN_EXPIRED';
+      // NOTE: checked via `.code`, not `instanceof BondifyVerificationError`.
+      // This package's own CJS build bundles each entry point
+      // (dist/index.cjs, dist/middleware/express.cjs) as a fully
+      // self-contained file — tsup does not share a common chunk between
+      // separate CJS outputs the way it does for ESM. That means this file
+      // and index.cjs each end up with their OWN copy of the
+      // BondifyVerificationError class, so `instanceof` across that
+      // boundary always returns false when this package is required via
+      // CJS (the common case for Express apps) — independent of platform.
+      // Checking `.code` sidesteps class identity entirely.
+      const isExpired = (e as { code?: string })?.code === 'TOKEN_EXPIRED';
 
       if (onUnauthorized) {
         onUnauthorized(req, res);

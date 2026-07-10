@@ -4,7 +4,20 @@
 // ============================================================
 
 import * as crypto from 'crypto';
-import * as jwt    from 'jsonwebtoken';
+// NOTE: default import, not `import * as jwt`. `jsonwebtoken` is CJS-only,
+// and its module.exports is a plain object whose values are all `require()`
+// calls (`{ verify: require('./verify'), sign: require('./sign'), ... }`).
+// Under Node's native ESM loader, named-export synthesis for CJS modules
+// relies on static source analysis (cjs-module-lexer) — and that analysis
+// does not reliably detect keys whose values come from require() calls; in
+// practice only the first such key gets exposed as a named export. A
+// namespace import (`import * as jwt`) depends on that synthesis and can
+// silently end up with `jwt.verify === undefined` — not a Windows-only
+// issue, this reproduces under any native (non-bundled) ESM consumer. The
+// default export, in contrast, is always the complete, real
+// `module.exports` object, so `jwt.verify`/`jwt.TokenExpiredError`/etc. are
+// guaranteed to be there when accessed through it.
+import jwt from 'jsonwebtoken';
 
 import type {
   BondifyServerConfig,
@@ -86,15 +99,32 @@ export class BondifyServer {
         algorithms: ['HS256'],
       }) as jwt.JwtPayload;
     } catch (e) {
-      if (e instanceof jwt.TokenExpiredError) {
+      // NOTE: we deliberately check `e.name` here instead of
+      // `e instanceof jwt.TokenExpiredError` / `jwt.JsonWebTokenError`.
+      //
+      // `jsonwebtoken` is a CJS-only package. Under `import * as jwt from
+      // 'jsonwebtoken'`, Node's ESM/CJS interop can — depending on platform
+      // and how the loader resolves the module graph — end up with the
+      // error thrown by `jwt.verify()` and the class referenced via the
+      // namespace import belonging to two different module instances. When
+      // that happens `instanceof` silently returns `false`, or the
+      // right-hand side is `undefined` and the check throws
+      // `Right-hand side of 'instanceof' is not an object`. This was
+      // observed to fail reliably on Windows while working fine on
+      // Linux/macOS. Checking `.name` (set by jsonwebtoken's own error
+      // classes) sidesteps module-identity entirely and works regardless of
+      // interop behavior, Node version, or platform.
+      const name = (e as Error)?.name;
+
+      if (name === 'TokenExpiredError') {
         throw new BondifyVerificationError(
           'Proof JWT has expired (proofs are valid for 5 minutes). The user must sign in again.',
           'TOKEN_EXPIRED'
         );
       }
-      if (e instanceof jwt.JsonWebTokenError) {
+      if (name === 'JsonWebTokenError') {
         throw new BondifyVerificationError(
-          `Invalid proof JWT signature: ${e.message}`,
+          `Invalid proof JWT signature: ${(e as Error).message}`,
           'INVALID_SIGNATURE'
         );
       }
@@ -115,10 +145,16 @@ export class BondifyServer {
       }
     }
 
+    // NOTE: telegram_phone is only present in the JWT for the Pro/Business
+    // one-tap phone flow, mirroring the `telegram_phone` field already sent
+    // in the webhook payload (WebhookEventConfirmed) for the same
+    // confirmed-auth event. If a given proof's JWT doesn't carry this claim,
+    // this correctly falls back to null — same as before this field existed.
     return {
       telegramId:       String(payload.telegram_id),
       telegramName:     String(payload.telegram_name),
       telegramUsername: payload.telegram_username ?? null,
+      telegramPhone:    payload.telegram_phone ?? null,
       projectId:        String(payload.project_id),
       sessionToken:     String(payload.session_token),
       confirmedAt:      Number(payload.confirmed_at ?? 0),

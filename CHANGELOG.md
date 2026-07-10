@@ -2,6 +2,103 @@
 
 All notable changes to `@bondify/node` will be documented in this file.
 
+## 3.0.2 — Critical: `verifyProof()` could throw `jwt.verify is not a function` under native ESM
+
+**This is a more severe, non-Windows-specific bug found while re-verifying the 3.0.1 fix — upgrade is strongly recommended for all platforms.**
+
+**Fixed:**
+
+- **`verifyProof()` could fail entirely with `TypeError: jwt.verify is not a
+  function`** when `@bondify/node`'s ESM build (`dist/index.js`) is loaded by
+  Node's native ESM resolver — i.e. any consumer that isn't bundling this
+  package through a bundler (webpack/esbuild/Turbopack), such as a plain
+  Node.js server with `"type": "module"` or a `.mjs` entry point. This is
+  **not limited to Windows** and does not depend on any error path — it
+  broke the success path too, unconditionally, wherever it occurred.
+
+  Root cause: `jsonwebtoken` is CJS-only, and its `module.exports` is an
+  object literal whose values are all `require()` calls (`{ verify:
+  require('./verify'), sign: require('./sign'), ... }`). Node's native ESM
+  loader synthesizes named exports for CJS modules via static source
+  analysis (`cjs-module-lexer`), and that analysis does not reliably detect
+  object keys whose values are `require()` calls — in practice, only the
+  first such key was exposed as a named export, and `jsonwebtoken`'s
+  `verify`, `sign`, `TokenExpiredError`, etc. were all invisible to a
+  `import * as jwt from 'jsonwebtoken'` namespace import. This is a general
+  limitation, verified independently of the specific `jsonwebtoken` version.
+
+  Fixed by switching to `import jwt from 'jsonwebtoken'` (a default import).
+  Node's ESM loader always provides the complete, real `module.exports`
+  object as the default export, regardless of the lexer's ability to detect
+  individual named exports — so `jwt.verify`, `jwt.TokenExpiredError`, etc.
+  are now guaranteed to be present.
+
+- Verified with an actual end-to-end run of both the ESM (`dist/index.js`)
+  and CJS (`dist/index.cjs`) builds — valid proof, expired proof, and
+  invalid-signature proof all now resolve identically on both.
+
+- **`createBondifyMiddleware()` could never correctly report an expired
+  token as `TOKEN_EXPIRED`** — it always fell back to the generic
+  `INVALID_TOKEN` response instead. This package's CJS build bundles each
+  entry point (`dist/index.cjs`, `dist/middleware/express.cjs`) as a fully
+  self-contained file; tsup does not share a common chunk between separate
+  CJS outputs the way it does for ESM. As a result, `dist/index.cjs` and
+  `dist/middleware/express.cjs` each ended up with their **own separate
+  copy** of the `BondifyVerificationError` class, so the middleware's
+  `e instanceof BondifyVerificationError` check always evaluated to
+  `false` when this package is required via CJS (the common case for
+  Express apps) — independent of platform, and present since the
+  middleware was introduced. Fixed by checking `e.code === 'TOKEN_EXPIRED'`
+  directly instead of `instanceof`. Verified end-to-end against a real
+  Express-style request/response cycle with both valid and expired tokens.
+  (This did not affect `bondify.verifyProof()` used directly, or the ESM
+  build, which does correctly share one `BondifyVerificationError` class
+  across entry points via a common chunk — only `createBondifyMiddleware()`
+  consumed via `require()`.)
+
+**Added:**
+
+- **`BondifyUser` (returned by `verifyProof()`/`safeVerifyProof()`) now
+  includes `telegramPhone: string | null`**, mirroring the field already
+  present in webhook payloads (`WebhookEventConfirmed.telegram_phone`) and
+  in `@bondify/react`'s client-side `BondifyUser`. Previously this field
+  didn't exist on the server-verified user at all, so
+  `@bondify/react/server`'s `getServerUser()` always hardcoded it to
+  `null` even when a phone number was available (Pro/Business one-tap
+  flow) — client and server `BondifyUser` shapes are now consistent.
+  Requires `@bondify/react@^3.0.2` to pick this up in `getServerUser()`.
+
+No action needed to upgrade: `npm i @bondify/node@^3.0.1`. If you were
+working around this (e.g. by calling `jsonwebtoken` directly instead of
+`verifyProof()`), you can now remove that workaround.
+
+## 3.0.1 — Windows fix for `verifyProof()`
+
+**Fixed:**
+
+- **`verifyProof()` could throw `Right-hand side of 'instanceof' is not an
+  object` on Windows.** The error-classification logic used
+  `e instanceof jwt.TokenExpiredError` / `jwt.JsonWebTokenError` against a
+  namespace import (`import * as jwt from 'jsonwebtoken'`) of a CJS-only
+  package. Depending on how Node's ESM/CJS interop resolved the module graph,
+  the error thrown by `jwt.verify()` and the class referenced through the
+  namespace import could end up as two different module instances, making
+  `instanceof` unreliable — this reproduced consistently on Windows and not
+  on Linux/macOS. Replaced the check with `error.name === 'TokenExpiredError'`
+  / `'JsonWebTokenError'`, which does not depend on module identity and is
+  correct on every platform. This affects `verifyProof()` directly, and
+  everything built on top of it: `createBondifyMiddleware`,
+  `verifyNextRequest`, and `@bondify/react/server`'s `requireAuth`.
+- **Inconsistent import path in the `createWebhookHandler` /
+  `createNextWebhookHandler` JSDoc examples.** The in-code examples imported
+  both functions from the package root (`@bondify/node`) instead of the
+  `@bondify/node/webhooks` subpath where they actually live. Both paths work
+  (everything is re-exported from the root too), but the examples now
+  consistently use the subpath to match the rest of the docs and avoid
+  confusion about which import style is canonical.
+
+No breaking changes. No API surface changes — this is a bugfix-only release.
+
 ## 3.0.0 — Standardized identity shape, async verification
 
 **Breaking changes:**
